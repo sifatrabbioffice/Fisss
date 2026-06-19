@@ -1,0 +1,72 @@
+name: "Godot iOS Unsigned Build"
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build-ios:
+    runs-on: macos-latest
+
+    steps:
+      # ১. রিপোজিটরি থেকে কোড ডাউনলোড করা
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      # ২. জিপ ফাইল আনজিপ করা
+      - name: Unzip Project Files
+        run: |
+          echo "Unzipping project files..."
+          unzip -o game_project.zip -d project_folder
+          
+      # ৩. গডট ইঞ্জিন ডাউনলোড ও সেটআপ করা
+      - name: Download and Setup Godot Engine
+        run: |
+          echo "Downloading Godot Engine..."
+          curl -L -o Godot.zip https://github.com/godotengine/godot/releases/download/4.2.1-stable/Godot_v4.2.1-stable_macos.universal.zip
+          unzip Godot.zip
+          mv Godot.app /Applications/Godot.app
+          echo "/Applications/Godot.app/Contents/MacOS" >> $GITHUB_PATH
+
+      # ৪. গডট প্রজেক্ট থেকে আইওএস প্রজেক্ট এক্সপোর্ট করা
+      - name: Godot Export to iOS
+        run: |
+          mkdir -p build/ios
+          # এখানে জিপ ফাইল আনজিপ হওয়া 'project_folder' ডিরেক্টরি ব্যবহার করা হচ্ছে
+          Godot --headless --path project_folder --export-release "iOS" build/ios/export_project.xcodeproj
+          
+          echo "Checking exported files:"
+          ls -la build/ios
+
+      # ৫. এক্সকোড প্রজেক্ট এবং স্কিম অটোমেটিক খুঁজে বের করে বিল্ড করা
+      - name: Build Xcode Project (Unsigned)
+        run: |
+          cd build/ios
+          
+          # তৈরি হওয়া .xcodeproj ফাইল খুঁজে বের করা
+          XCODE_PROJ=$(ls -d *.xcodeproj | head -n 1)
+          echo "Found Xcode Project: $XCODE_PROJ"
+          
+          # প্রজেক্টের ভেতরের সঠিক স্কিম (Scheme) এর নাম খুঁজে বের করা
+          SCHEME_NAME=$(xcodebuild -list -project "$XCODE_PROJ" | awk '/Schemes:/{flag=1;next}/^$/{flag=0}flag' | sed 's/^[ \t]*//' | head -n 1)
+          echo "Found Scheme Name: $SCHEME_NAME"
+          
+          # কোনো সাইনিং সার্টিফিকেট ছাড়াই আনসাইনড বিল্ড রান করা
+          xcodebuild -project "$XCODE_PROJ" \
+            -scheme "$SCHEME_NAME" \
+            -configuration Release \
+            -sdk iphoneos \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            PROVISIONING_PROFILE_SPECIFIER="" \
+            clean build
+
+      # ৬. তৈরি হওয়া ফাইলগুলোকে আর্টফ্যাক্ট হিসেবে সেভ করা
+      - name: Upload Unsigned Build Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-unsigned-build
+          path: build/ios/build/Release-iphoneos/
