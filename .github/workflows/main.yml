@@ -36,20 +36,15 @@ jobs:
 
       - name: Godot Export to iOS
         run: |
-          # এক্সপোর্ট করার আগে ডিরেক্টরি নিশ্চিত করা
           mkdir -p project_folder/build/ios
-          
-          # হেডলেস মোডে প্রোজেক্ট পাথ এবং এক্সপোর্ট পাথ ডিফাইন করে রান করা
           Godot --headless --path project_folder/ --export-release "iOS" ./build/ios/export_project.xcodeproj
-          
-          # ফাইল তৈরি হয়েছে কিনা তা চেক করা এবং Xcode বিল্ডের সুবিধার জন্য মুভ করা
           mkdir -p build/ios
           cp -R project_folder/build/ios/ build/ios/
 
       - name: Build Xcode Project (Unsigned)
         run: |
           cd build/ios
-          # প্রোজেক্ট ফাইলটি সঠিকভাবে ডিটেক্ট করার জন্য রিনেম বা সরাসরি কল করা
+          # এখানে CONFIGURATION_BUILD_DIR যোগ করা হয়েছে যাতে আউটপুট নির্দিষ্ট ফোল্ডারে জমা হয়
           xcodebuild -project export_project.xcodeproj \
             -scheme export_project \
             -configuration Release \
@@ -58,10 +53,11 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             PROVISIONING_PROFILE_SPECIFIER="" \
+            CONFIGURATION_BUILD_DIR="./output" \
             clean build
 
       - name: Upload Unsigned Build Artifact
         uses: actions/upload-artifact@v4
         with:
           name: ios-unsigned-build
-          path: build/ios/build/Release-iphoneos/
+          path: build/ios/output/
