@@ -44,7 +44,6 @@ jobs:
       - name: Build Xcode Project (Unsigned)
         run: |
           cd build/ios
-          # এখানে CONFIGURATION_BUILD_DIR যোগ করা হয়েছে যাতে আউটপুট নির্দিষ্ট ফোল্ডারে জমা হয়
           xcodebuild -project export_project.xcodeproj \
             -scheme export_project \
             -configuration Release \
@@ -56,8 +55,20 @@ jobs:
             CONFIGURATION_BUILD_DIR="./output" \
             clean build
 
-      - name: Upload Unsigned Build Artifact
+      - name: Convert .app to .ipa (Payload Packing)
+        run: |
+          cd build/ios/output
+          # Payload ফোল্ডার তৈরি করা হচ্ছে
+          mkdir Payload
+          # .app ফাইলটি Payload ফোল্ডারে মুভ করা হচ্ছে
+          mv *.app Payload/
+          # জিপ করে .ipa ফাইল বানানো হচ্ছে
+          zip -r igame_unsigned.ipa Payload
+          # অপ্রয়োজনীয় ফোল্ডার মুছে ফেলা হচ্ছে যাতে শুধু .ipa ফাইলটি থাকে
+          rm -rf Payload
+
+      - name: Upload Unsigned .IPA Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ios-unsigned-build
-          path: build/ios/output/
+          name: ios-unsigned-ipa
+          path: build/ios/output/igame_unsigned.ipa
