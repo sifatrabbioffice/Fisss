@@ -18,12 +18,21 @@ jobs:
         run: |
           unzip -o game_project.zip -d project_folder
           
-      - name: Download and Setup Godot
+      - name: Download and Setup Godot & Export Templates
         run: |
+          # ১. গডট ইঞ্জিন ডাউনলোড ও সেটআপ
           curl -L -o Godot.zip https://github.com/godotengine/godot/releases/download/4.2.1-stable/Godot_v4.2.1-stable_macos.universal.zip
           unzip Godot.zip
           mv Godot.app /Applications/Godot.app
           echo "/Applications/Godot.app/Contents/MacOS" >> $GITHUB_PATH
+          
+          # ২. গডট এক্সপোর্ট টেমপ্লেট ডাউনলোড
+          curl -L -o templates.tpz https://github.com/godotengine/godot/releases/download/4.2.1-stable/Godot_v4.2.1-stable_export_templates.tpz
+          unzip templates.tpz
+          
+          # ৩. আইওএস টেমপ্লেটটি নির্দিষ্ট ফোল্ডারে মুভ করা (যা গডট খুঁজছিল)
+          mkdir -p "$HOME/Library/Application Support/Godot/export_templates/4.2.1.stable"
+          mv templates/ios.zip "$HOME/Library/Application Support/Godot/export_templates/4.2.1.stable/ios.zip"
 
       - name: Godot Export to iOS
         run: |
