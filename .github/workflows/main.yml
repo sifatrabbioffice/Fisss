@@ -36,16 +36,21 @@ jobs:
 
       - name: Godot Export to iOS
         run: |
+          # প্রজেক্টের ভেতরে এক্সপোর্ট ফোল্ডার তৈরি
           mkdir -p project_folder/build/ios
-          Godot --headless --path project_folder/ --export-release "iOS" ./build/ios/export_project.xcodeproj
+          # গডট দিয়ে রিয়েল প্যাকড এক্সকোড প্রোজেক্ট এক্সপোর্ট
+          Godot --headless --path project_folder/ --export-release "iOS" ./build/ios/igame.xcodeproj
+          
+          # ফাইল মেইন বিল্ড ডিরেক্টরিতে মুভ করা
           mkdir -p build/ios
           cp -R project_folder/build/ios/ build/ios/
 
-      - name: Build Xcode Project (Unsigned)
+      - name: Build Xcode Project (Unsigned with Game Data)
         run: |
           cd build/ios
-          xcodebuild -project export_project.xcodeproj \
-            -scheme export_project \
+          # এক্সকোড দিয়ে সমস্ত ৩ডি ক্যামেরা ও অ্যাসেট সহ ফুল কম্পাইল করা
+          xcodebuild -project igame.xcodeproj \
+            -scheme igame \
             -configuration Release \
             -sdk iphoneos \
             CODE_SIGNING_ALLOWED=NO \
@@ -58,13 +63,9 @@ jobs:
       - name: Convert .app to .ipa (Payload Packing)
         run: |
           cd build/ios/output
-          # Payload ফোল্ডার তৈরি করা হচ্ছে
           mkdir Payload
-          # .app ফাইলটি Payload ফোল্ডারে মুভ করা হচ্ছে
           mv *.app Payload/
-          # জিপ করে .ipa ফাইল বানানো হচ্ছে
           zip -r igame_unsigned.ipa Payload
-          # অপ্রয়োজনীয় ফোল্ডার মুছে ফেলা হচ্ছে যাতে শুধু .ipa ফাইলটি থাকে
           rm -rf Payload
 
       - name: Upload Unsigned .IPA Artifact
