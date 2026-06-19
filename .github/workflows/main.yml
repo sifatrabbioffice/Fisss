@@ -30,18 +30,26 @@ jobs:
           curl -L -o templates.tpz https://github.com/godotengine/godot/releases/download/4.2.1-stable/Godot_v4.2.1-stable_export_templates.tpz
           unzip templates.tpz
           
-          # ৩. আইওএস টেমপ্লেটটি নির্দিষ্ট ফোল্ডারে মুভ করা (যা গডট খুঁজছিল)
+          # ৩. আইওএস টেমপ্লেটটি নির্দিষ্ট ফোল্ডারে মুভ করা
           mkdir -p "$HOME/Library/Application Support/Godot/export_templates/4.2.1.stable"
           mv templates/ios.zip "$HOME/Library/Application Support/Godot/export_templates/4.2.1.stable/ios.zip"
 
       - name: Godot Export to iOS
         run: |
+          # এক্সপোর্ট করার আগে ডিরেক্টরি নিশ্চিত করা
+          mkdir -p project_folder/build/ios
+          
+          # হেডলেস মোডে প্রোজেক্ট পাথ এবং এক্সপোর্ট পাথ ডিফাইন করে রান করা
+          Godot --headless --path project_folder/ --export-release "iOS" ./build/ios/export_project.xcodeproj
+          
+          # ফাইল তৈরি হয়েছে কিনা তা চেক করা এবং Xcode বিল্ডের সুবিধার জন্য মুভ করা
           mkdir -p build/ios
-          Godot --headless --path project_folder --export-release "iOS" build/ios/export_project.xcodeproj
+          cp -R project_folder/build/ios/ build/ios/
 
       - name: Build Xcode Project (Unsigned)
         run: |
           cd build/ios
+          # প্রোজেক্ট ফাইলটি সঠিকভাবে ডিটেক্ট করার জন্য রিনেম বা সরাসরি কল করা
           xcodebuild -project export_project.xcodeproj \
             -scheme export_project \
             -configuration Release \
