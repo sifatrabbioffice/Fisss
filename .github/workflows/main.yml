@@ -45,7 +45,7 @@ jobs:
         run: |
           mkdir -p "$GITHUB_WORKSPACE/build/ios"
           
-          # Changed target to game_project.xcodeproj
+          # Output name changed to game_project.xcodeproj
           Godot --headless --path project_folder/ --export-release "iOS" "$GITHUB_WORKSPACE/build/ios/game_project.xcodeproj"
           
           echo "=== Exported Build Directory Contents ==="
@@ -93,7 +93,7 @@ jobs:
           
           if ls *.app 1> /dev/null 2>&1; then
             mv *.app Payload/
-            # Changed final compressed archive name to game_project_unsigned.ipa
+            # Zip output named game_project_unsigned.ipa
             zip -r game_project_unsigned.ipa Payload
             rm -rf Payload
             echo "✅ Successfully created game_project_unsigned.ipa"
