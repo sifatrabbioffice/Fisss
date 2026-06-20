@@ -28,33 +28,35 @@ jobs:
 
           # 2. Godot Export Templates download
           curl -L -o templates.tpz https://github.com/godotengine/godot/releases/download/4.2.1-stable/Godot_v4.2.1-stable_export_templates.tpz
-          unzip templates.tpz
+          
+          # Rename to .zip so unzip handles it cleanly without warnings
+          mv templates.tpz templates.zip
+          unzip templates.zip
 
-          # 3. Move iOS template to the correct folder
+          # 3. Correctly place the export templates
+          # Inside the tpz, the folder is actually named 'templates'
           mkdir -p "$HOME/Library/Application Support/Godot/export_templates/4.2.1.stable"
-          mv templates/ios.zip "$HOME/Library/Application Support/Godot/export_templates/4.2.1.stable/ios.zip"
+          mv templates/* "$HOME/Library/Application Support/Godot/export_templates/4.2.1.stable/"
 
-      # â BUG FIX 1: Resource import step added (was completely missing)
-      # Without this, Godot will fail to export â all assets must be imported first
       - name: Import Godot Project Resources
         run: |
           Godot --headless --path project_folder/ --editor --quit || true
 
-      # â BUG FIX 2: Removed wrong mkdir + cp that overwrote the exported project
-      # â BUG FIX 3: Using absolute path ($GITHUB_WORKSPACE) so Godot writes to correct location
       - name: Godot Export to iOS Xcode Project
         run: |
           mkdir -p "$GITHUB_WORKSPACE/build/ios"
+          # Ensure "iOS" matches your exact Export Preset name in Godot
           Godot --headless --path project_folder/ --export-release "iOS" "$GITHUB_WORKSPACE/build/ios/igame.xcodeproj"
 
-      # â BUG FIX 4: CONFIGURATION_BUILD_DIR now uses absolute path (relative path caused xcodebuild issues)
       - name: Build Xcode Project (Unsigned with Full Engine & Data)
         run: |
           OUTPUT_DIR="$GITHUB_WORKSPACE/build/ios/output"
           mkdir -p "$OUTPUT_DIR"
           cd "$GITHUB_WORKSPACE/build/ios"
+          
+          # Note: If this fails, double check if your scheme is 'iOS' or 'igame'
           xcodebuild -project igame.xcodeproj \
-            -scheme igame \
+            -scheme "iOS" \
             -configuration Release \
             -sdk iphoneos \
             -arch arm64 \
@@ -70,9 +72,16 @@ jobs:
         run: |
           cd "$GITHUB_WORKSPACE/build/ios/output"
           mkdir -p Payload
-          mv *.app Payload/
-          zip -r igame_unsigned.ipa Payload
-          rm -rf Payload
+          
+          # Safeguard check to see if the .app actually built
+          if [ -d *.app ]; then
+            mv *.app Payload/
+            zip -r igame_unsigned.ipa Payload
+            rm -rf Payload
+          else
+            echo "Error: .app bundle not found! Xcode build likely failed."
+            exit 1
+          fi
 
       - name: Upload Unsigned .IPA Artifact
         uses: actions/upload-artifact@v4
