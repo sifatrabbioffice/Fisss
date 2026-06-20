@@ -1,8 +1,10 @@
-name: "Build iOS App"
+name: "Godot iOS Build"
 
 on:
   push:
-    branches: [ "main", "master" ]
+    branches:
+      - main
+      - master
   workflow_dispatch:
 
 jobs:
@@ -10,12 +12,17 @@ jobs:
     runs-on: macos-latest
 
     env:
-      GODOT_VERSION: "4.3" # Change to your exact Godot version (e.g., 4.2.2, 4.3)
+      GODOT_VERSION: "4.2.1"
       PROJECT_NAME: "game_project"
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
+
+      - name: Unzip Project Files
+        run: |
+          # Extra precautions to ensure file extraction permissions match the workflow runner environment
+          unzip -o game_project.zip -d project_folder
 
       - name: Cache Godot Editor and Templates
         id: cache-godot
@@ -45,11 +52,17 @@ jobs:
           mv /tmp/templates/* ~/.local/share/godot/export_templates/${{ env.GODOT_VERSION }}.stable/
           rm Godot_v${{ env.GODOT_VERSION }}-stable_export_templates.tpz
 
+      - name: Import Godot Project Resources
+        run: |
+          # Rebuild resource and meta allocations directly within the target directory path
+          /Applications/Godot.app/Contents/MacOS/Godot --headless --path project_folder/ --editor --quit || true
+
       - name: Godot Export Xcode Project
         run: |
           mkdir -p ios_build
           echo "🚀 Exporting Godot project to Xcode..."
-          /Applications/Godot.app/Contents/MacOS/Godot --headless --path . --export-release "iOS" ios_build/${{ env.PROJECT_NAME }}.xcodeproj
+          # Changed execution context path to target extracted subfolders cleanly
+          /Applications/Godot.app/Contents/MacOS/Godot --headless --path project_folder/ --export-release "iOS" "$GITHUB_WORKSPACE/ios_build/${{ env.PROJECT_NAME }}.xcodeproj"
 
       - name: Build Xcode Project (Simulator / No Signing)
         run: |
@@ -61,9 +74,12 @@ jobs:
             -scheme "${{ env.PROJECT_NAME }}" \
             -configuration Release \
             -sdk iphonesimulator \
+            -quiet \
+            ONLY_ACTIVE_ARCH=NO \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
+            PROVISIONING_PROFILE_SPECIFIER="" \
             COMPILER_INDEX_STORE_ENABLE=NO \
             VALIDATE_PRODUCT=NO
 
