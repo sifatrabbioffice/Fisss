@@ -17,53 +17,59 @@ jobs:
       - name: Unzip Project Files
         run: |
           unzip -o game_project.zip -d project_folder
-          
+
       - name: Download and Setup Godot & Export Templates
         run: |
-          # ১. গডট ইঞ্জিন ডাউনলোড ও সেটআপ
+          # 1. Godot Engine download & setup
           curl -L -o Godot.zip https://github.com/godotengine/godot/releases/download/4.2.1-stable/Godot_v4.2.1-stable_macos.universal.zip
           unzip Godot.zip
           mv Godot.app /Applications/Godot.app
           echo "/Applications/Godot.app/Contents/MacOS" >> $GITHUB_PATH
-          
-          # ২. গডট এক্সপোর্ট টেমপ্লেট ডাউনলোড
+
+          # 2. Godot Export Templates download
           curl -L -o templates.tpz https://github.com/godotengine/godot/releases/download/4.2.1-stable/Godot_v4.2.1-stable_export_templates.tpz
           unzip templates.tpz
-          
-          # ৩. আইওএস টেমপ্লেটটি নির্দিষ্ট ফোল্ডারে মুভ করা
+
+          # 3. Move iOS template to the correct folder
           mkdir -p "$HOME/Library/Application Support/Godot/export_templates/4.2.1.stable"
           mv templates/ios.zip "$HOME/Library/Application Support/Godot/export_templates/4.2.1.stable/ios.zip"
 
-      - name: Godot Export to iOS
+      # â BUG FIX 1: Resource import step added (was completely missing)
+      # Without this, Godot will fail to export â all assets must be imported first
+      - name: Import Godot Project Resources
         run: |
-          # প্রজেক্টের ভেতরে এক্সপোর্ট ফোল্ডার তৈরি
-          mkdir -p project_folder/build/ios
-          # গডট দিয়ে রিয়েল প্যাকড এক্সকোড প্রোজেক্ট এক্সপোর্ট
-          Godot --headless --path project_folder/ --export-release "iOS" ./build/ios/igame.xcodeproj
-          
-          # ফাইল মেইন বিল্ড ডিরেক্টরিতে মুভ করা
-          mkdir -p build/ios
-          cp -R project_folder/build/ios/ build/ios/
+          Godot --headless --path project_folder/ --editor --quit || true
 
-      - name: Build Xcode Project (Unsigned with Game Data)
+      # â BUG FIX 2: Removed wrong mkdir + cp that overwrote the exported project
+      # â BUG FIX 3: Using absolute path ($GITHUB_WORKSPACE) so Godot writes to correct location
+      - name: Godot Export to iOS Xcode Project
         run: |
-          cd build/ios
-          # এক্সকোড দিয়ে সমস্ত ৩ডি ক্যামেরা ও অ্যাসেট সহ ফুল কম্পাইল করা
+          mkdir -p "$GITHUB_WORKSPACE/build/ios"
+          Godot --headless --path project_folder/ --export-release "iOS" "$GITHUB_WORKSPACE/build/ios/igame.xcodeproj"
+
+      # â BUG FIX 4: CONFIGURATION_BUILD_DIR now uses absolute path (relative path caused xcodebuild issues)
+      - name: Build Xcode Project (Unsigned with Full Engine & Data)
+        run: |
+          OUTPUT_DIR="$GITHUB_WORKSPACE/build/ios/output"
+          mkdir -p "$OUTPUT_DIR"
+          cd "$GITHUB_WORKSPACE/build/ios"
           xcodebuild -project igame.xcodeproj \
             -scheme igame \
             -configuration Release \
             -sdk iphoneos \
+            -arch arm64 \
+            ONLY_ACTIVE_ARCH=NO \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             PROVISIONING_PROFILE_SPECIFIER="" \
-            CONFIGURATION_BUILD_DIR="./output" \
+            CONFIGURATION_BUILD_DIR="$OUTPUT_DIR" \
             clean build
 
       - name: Convert .app to .ipa (Payload Packing)
         run: |
-          cd build/ios/output
-          mkdir Payload
+          cd "$GITHUB_WORKSPACE/build/ios/output"
+          mkdir -p Payload
           mv *.app Payload/
           zip -r igame_unsigned.ipa Payload
           rm -rf Payload
