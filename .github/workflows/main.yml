@@ -19,10 +19,16 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Unzip Project Files
+      - name: Verify and Unzip Project Files
         run: |
-          # Extra precautions to ensure file extraction permissions match the workflow runner environment
-          unzip -o game_project.zip -d project_folder
+          if [ -f "game_project.zip" ]; then
+            echo "✅ game_project.zip found! Extracting..."
+            unzip -o game_project.zip -d project_folder
+          else
+            echo "❌ Error: game_project.zip not found in the repository root!"
+            echo "Please make sure your zip file name is exactly 'game_project.zip'"
+            exit 1
+          fi
 
       - name: Cache Godot Editor and Templates
         id: cache-godot
@@ -54,15 +60,43 @@ jobs:
 
       - name: Import Godot Project Resources
         run: |
-          # Rebuild resource and meta allocations directly within the target directory path
+          # গডোটের ইন্টারনাল ফাইল এবং ফাইলসিস্টেম ক্যাশ জেনারেট করার জন্য
           /Applications/Godot.app/Contents/MacOS/Godot --headless --path project_folder/ --editor --quit || true
+
+      - name: Auto-Generate Export Presets if Missing
+        run: |
+          # যদি আপনার জিপের ভেতর export_presets.cfg না থাকে, তবে এই কমান্ডটি স্বয়ংক্রিয়ভাবে একটি iOS প্রিসেট বানিয়ে দেবে
+          if [ ! -f "project_folder/export_presets.cfg" ]; then
+            echo "⚠️ export_presets.cfg missing! Creating a temporary iOS preset..."
+            cat <<EOF > project_folder/export_presets.cfg
+          [preset.0]
+          name="iOS"
+          platform="iOS"
+          runnable=true
+          dedicated_server=false
+          custom_features=""
+          export_filter="all_files"
+          include_filter=""
+          exclude_filter=""
+          export_path="../ios_build/game_project.xcodeproj"
+          EOF
+          fi
 
       - name: Godot Export Xcode Project
         run: |
           mkdir -p ios_build
           echo "🚀 Exporting Godot project to Xcode..."
-          # Changed execution context path to target extracted subfolders cleanly
+          # গডোট হেডলেস মোডে আপনার জন্য game_project.xcodeproj তৈরি করবে
           /Applications/Godot.app/Contents/MacOS/Godot --headless --path project_folder/ --export-release "iOS" "$GITHUB_WORKSPACE/ios_build/${{ env.PROJECT_NAME }}.xcodeproj"
+
+      - name: Verify Export Success
+        run: |
+          echo "=== Checking exported files ==="
+          ls -la "$GITHUB_WORKSPACE/ios_build"
+          if [ ! -d "$GITHUB_WORKSPACE/ios_build/${{ env.PROJECT_NAME }}.xcodeproj" ]; then
+            echo "❌ Error: Godot failed to create the Xcode project directory!"
+            exit 1
+          fi
 
       - name: Build Xcode Project (Simulator / No Signing)
         run: |
