@@ -45,9 +45,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: |
-            ~/.local/share/godot/export_templates
+            ~/Library/Application Support/Godot/export_templates
             /Applications/Godot.app
-          key: ${{ runner.os }}-godot-${{ env.GODOT_VERSION }}
+          key: ${{ runner.os }}-godot-${{ env.GODOT_VERSION }}-v2
 
       - name: Download & Install Godot Engine
         if: steps.cache-godot.outputs.cache-hit != 'true'
@@ -63,14 +63,16 @@ jobs:
         run: |
           echo "📦 Downloading Export Templates..."
           curl -LO https://github.com/godotengine/godot/releases/download/${{ env.GODOT_VERSION }}-stable/Godot_v${{ env.GODOT_VERSION }}-stable_export_templates.tpz
-          mkdir -p ~/.local/share/godot/export_templates/${{ env.GODOT_VERSION }}.stable
+          
+          # macOS-এর জন্য সঠিক গডোট টেমপ্লেট ডিরেক্টরি তৈরি
+          mkdir -p "~/Library/Application Support/Godot/export_templates/${{ env.GODOT_VERSION }}.stable"
+          
           unzip Godot_v${{ env.GODOT_VERSION }}-stable_export_templates.tpz -d /tmp
-          mv /tmp/templates/* ~/.local/share/godot/export_templates/${{ env.GODOT_VERSION }}.stable/
+          mv /tmp/templates/* "~/Library/Application Support/Godot/export_templates/${{ env.GODOT_VERSION }}.stable/"
           rm Godot_v${{ env.GODOT_VERSION }}-stable_export_templates.tpz
 
       - name: Auto-Generate Export Presets
         run: |
-          # গডোটের সাইলেন্ট এক্সপোর্ট ফেইলুর আটকাতে প্রজেক্ট ফোল্ডারের ভেতরেই পাথ সেট করা হয়েছে
           rm -f project_folder/export_presets.cfg
           echo "📝 Writing custom export_presets.cfg directly inside the target layout..."
           cat <<EOF > project_folder/export_presets.cfg
@@ -84,6 +86,9 @@ jobs:
           include_filter=""
           exclude_filter=""
           export_path="ios_build/game_project.xcodeproj"
+
+          [preset.0.options]
+          # মিসিং সেকশন এরর দূর করার জন্য ফাকা অপশন যোগ করা হলো
           EOF
 
       - name: Import Godot Project Resources
@@ -92,14 +97,12 @@ jobs:
 
       - name: Godot Export Xcode Project
         run: |
-          # গডোট যাতে পাথ ডিটেক্ট করতে পারে, সেজন্য প্রজেক্ট ফোল্ডারের ভেতরেই আউটপুট ডিরেক্টরি তৈরি করা হয়েছে
           mkdir -p project_folder/ios_build
           echo "🚀 Exporting Godot project to Xcode..."
           /Applications/Godot.app/Contents/MacOS/Godot --headless --path project_folder/ --export-release "iOS" "ios_build/${{ env.PROJECT_NAME }}.xcodeproj"
 
       - name: Relocate and Verify Export Success
         run: |
-          # এক্সপোর্ট করা ফাইলগুলোকে মূল বিল্ড ডিরেক্টরিতে সরিয়ে আনা হচ্ছে
           mkdir -p "$GITHUB_WORKSPACE/ios_build"
           mv project_folder/ios_build/* "$GITHUB_WORKSPACE/ios_build/" 2>/dev/null || true
           
@@ -133,4 +136,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ios-xcode-build
-          path: ios_build/
+          path: ios_build/in
