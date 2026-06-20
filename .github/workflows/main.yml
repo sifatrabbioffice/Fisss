@@ -44,20 +44,20 @@ jobs:
 
       - name: Godot Export to iOS Xcode Project
         run: |
-          mkdir -p "$GITHUB_WORKSPACE/build/ios"
+          mkdir -p "$GITHUB_WORKSPACE/ios_build"
           
           # প্রজেক্ট পাথ রিলিজ মোডে এক্সপোর্ট করা হচ্ছে 
-          Godot --headless --path project_folder/ --export-release "iOS" "$GITHUB_WORKSPACE/build/ios/game_project.xcodeproj"
+          Godot --headless --path project_folder/ --export-release "iOS" "$GITHUB_WORKSPACE/ios_build/game_project.xcodeproj"
           
           echo "=== Exported Build Directory Contents ==="
-          ls -la "$GITHUB_WORKSPACE/build/ios"
+          ls -la "$GITHUB_WORKSPACE/ios_build"
 
       - name: Build Xcode Project (Unsigned with Full Engine & Data)
         run: |
-          OUTPUT_DIR="$GITHUB_WORKSPACE/build/ios/output"
+          OUTPUT_DIR="$GITHUB_WORKSPACE/output"
           mkdir -p "$OUTPUT_DIR"
           
-          cd "$GITHUB_WORKSPACE/build/ios"
+          cd "$GITHUB_WORKSPACE/ios_build"
           
           XCODE_PROJ=$(ls -d *.xcodeproj 2>/dev/null | head -n 1)
           
@@ -71,12 +71,13 @@ jobs:
           echo "🚀 Found Project: $XCODE_PROJ"
           echo "🚀 Using Scheme Name: $SCHEME_NAME"
           
-          # Xcode 16+ এ আনসাইন্ড বিল্ড সফল করার জন্য ফিক্সড প্যারামিটারসমূহ
+          # রানার ক্র্যাশ রোধে এবং আনসাইন্ড বিল্ড সাকসেস করতে "-quiet" ও এক্সট্রা ফ্ল্যাগ যোগ করা হয়েছে
           xcodebuild -project "$XCODE_PROJ" \
             -scheme "$SCHEME_NAME" \
             -configuration Release \
             -sdk iphoneos \
             -arch arm64 \
+            -quiet \
             ONLY_ACTIVE_ARCH=NO \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
@@ -92,7 +93,7 @@ jobs:
 
       - name: Convert .app to .ipa (Payload Packing)
         run: |
-          cd "$GITHUB_WORKSPACE/build/ios/output"
+          cd "$GITHUB_WORKSPACE/output"
           mkdir -p Payload
           
           if ls *.app 1> /dev/null 2>&1; then
@@ -110,4 +111,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ios-unsigned-ipa
-          path: build/ios/output/game_project_unsigned.ipa
+          path: output/game_project_unsigned.ipa
