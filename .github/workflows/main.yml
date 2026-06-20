@@ -39,13 +39,14 @@ jobs:
 
       - name: Import Godot Project Resources
         run: |
+          # গডোট ৪.২ এর জন্য প্রজেক্ট রিসোর্স আগে মেমোরিতে প্রিপেয়ার করা বাধ্যতামূলক
           Godot --headless --path project_folder/ --editor --quit || true
 
       - name: Godot Export to iOS Xcode Project
         run: |
           mkdir -p "$GITHUB_WORKSPACE/build/ios"
           
-          # Output name changed to game_project.xcodeproj
+          # প্রজেক্ট পাথ রিলিজ মোডে এক্সপোর্ট করা হচ্ছে 
           Godot --headless --path project_folder/ --export-release "iOS" "$GITHUB_WORKSPACE/build/ios/game_project.xcodeproj"
           
           echo "=== Exported Build Directory Contents ==="
@@ -58,7 +59,6 @@ jobs:
           
           cd "$GITHUB_WORKSPACE/build/ios"
           
-          # Dynamic detection finds game_project.xcodeproj automatically
           XCODE_PROJ=$(ls -d *.xcodeproj 2>/dev/null | head -n 1)
           
           if [ -z "$XCODE_PROJ" ]; then
@@ -71,6 +71,7 @@ jobs:
           echo "🚀 Found Project: $XCODE_PROJ"
           echo "🚀 Using Scheme Name: $SCHEME_NAME"
           
+          # অ্যাপল সাইনিং বাইপাস করে সম্পূর্ণ বাইনারি প্যাক করার কমান্ড
           xcodebuild -project "$XCODE_PROJ" \
             -scheme "$SCHEME_NAME" \
             -configuration Release \
@@ -93,7 +94,7 @@ jobs:
           
           if ls *.app 1> /dev/null 2>&1; then
             mv *.app Payload/
-            # Zip output named game_project_unsigned.ipa
+            # আনসাইন্ড আইপিএ জিপ ফরম্যাটে কম্প্রেস করা হচ্ছে
             zip -r game_project_unsigned.ipa Payload
             rm -rf Payload
             echo "✅ Successfully created game_project_unsigned.ipa"
