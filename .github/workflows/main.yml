@@ -29,12 +29,11 @@ jobs:
           # 2. Godot Export Templates download
           curl -L -o templates.tpz https://github.com/godotengine/godot/releases/download/4.2.1-stable/Godot_v4.2.1-stable_export_templates.tpz
           
-          # Rename to .zip so unzip handles it cleanly without warnings
+          # Rename to .zip so unzip handles it cleanly
           mv templates.tpz templates.zip
           unzip templates.zip
 
-          # 3. Correctly place the export templates
-          # Inside the tpz, the folder is actually named 'templates'
+          # 3. Correctly place the export templates where Godot looks for them
           mkdir -p "$HOME/Library/Application Support/Godot/export_templates/4.2.1.stable"
           mv templates/* "$HOME/Library/Application Support/Godot/export_templates/4.2.1.stable/"
 
@@ -45,18 +44,37 @@ jobs:
       - name: Godot Export to iOS Xcode Project
         run: |
           mkdir -p "$GITHUB_WORKSPACE/build/ios"
-          # Ensure "iOS" matches your exact Export Preset name in Godot
+          
+          # Force export. Ensure "iOS" matches your exact Export Preset name in Godot
           Godot --headless --path project_folder/ --export-release "iOS" "$GITHUB_WORKSPACE/build/ios/igame.xcodeproj"
+          
+          # Debug: Print directory contents to ensure the export succeeded
+          echo "=== Exported Build Directory Contents ==="
+          ls -la "$GITHUB_WORKSPACE/build/ios"
 
       - name: Build Xcode Project (Unsigned with Full Engine & Data)
         run: |
           OUTPUT_DIR="$GITHUB_WORKSPACE/build/ios/output"
           mkdir -p "$OUTPUT_DIR"
+          
           cd "$GITHUB_WORKSPACE/build/ios"
           
-          # Note: If this fails, double check if your scheme is 'iOS' or 'igame'
-          xcodebuild -project igame.xcodeproj \
-            -scheme "iOS" \
+          # Dynamic detection: Automatically find whatever .xcodeproj Godot actually generated
+          XCODE_PROJ=$(ls -d *.xcodeproj 2>/dev/null | head -n 1)
+          
+          if [ -z "$XCODE_PROJ" ]; then
+            echo "❌ Error: No .xcodeproj found! The Godot export step likely failed or crashed silently."
+            exit 1
+          fi
+          
+          # Extract the scheme name dynamically (strips '.xcodeproj' from the filename)
+          SCHEME_NAME="${XCODE_PROJ%.xcodeproj}"
+          
+          echo "🚀 Found Project: $XCODE_PROJ"
+          echo "🚀 Using Scheme Name: $SCHEME_NAME"
+          
+          xcodebuild -project "$XCODE_PROJ" \
+            -scheme "$SCHEME_NAME" \
             -configuration Release \
             -sdk iphoneos \
             -arch arm64 \
@@ -73,13 +91,14 @@ jobs:
           cd "$GITHUB_WORKSPACE/build/ios/output"
           mkdir -p Payload
           
-          # Safeguard check to see if the .app actually built
-          if [ -d *.app ]; then
+          # Safeguard check to ensure the compilation actually generated an app bundle
+          if ls *.app 1> /dev/null 2>&1; then
             mv *.app Payload/
             zip -r igame_unsigned.ipa Payload
             rm -rf Payload
+            echo "✅ Successfully created igame_unsigned.ipa"
           else
-            echo "Error: .app bundle not found! Xcode build likely failed."
+            echo "❌ Error: .app bundle not found! The xcodebuild step failed to produce an executable."
             exit 1
           fi
 
