@@ -45,10 +45,9 @@ jobs:
         run: |
           mkdir -p "$GITHUB_WORKSPACE/build/ios"
           
-          # Force export. Ensure "iOS" matches your exact Export Preset name in Godot
-          Godot --headless --path project_folder/ --export-release "iOS" "$GITHUB_WORKSPACE/build/ios/igame.xcodeproj"
+          # Changed target to game_project.xcodeproj
+          Godot --headless --path project_folder/ --export-release "iOS" "$GITHUB_WORKSPACE/build/ios/game_project.xcodeproj"
           
-          # Debug: Print directory contents to ensure the export succeeded
           echo "=== Exported Build Directory Contents ==="
           ls -la "$GITHUB_WORKSPACE/build/ios"
 
@@ -59,15 +58,14 @@ jobs:
           
           cd "$GITHUB_WORKSPACE/build/ios"
           
-          # Dynamic detection: Automatically find whatever .xcodeproj Godot actually generated
+          # Dynamic detection finds game_project.xcodeproj automatically
           XCODE_PROJ=$(ls -d *.xcodeproj 2>/dev/null | head -n 1)
           
           if [ -z "$XCODE_PROJ" ]; then
-            echo "❌ Error: No .xcodeproj found! The Godot export step likely failed or crashed silently."
+            echo "❌ Error: No .xcodeproj found! The Godot export step likely failed."
             exit 1
           fi
           
-          # Extract the scheme name dynamically (strips '.xcodeproj' from the filename)
           SCHEME_NAME="${XCODE_PROJ%.xcodeproj}"
           
           echo "🚀 Found Project: $XCODE_PROJ"
@@ -93,14 +91,14 @@ jobs:
           cd "$GITHUB_WORKSPACE/build/ios/output"
           mkdir -p Payload
           
-          # Safeguard check to ensure the compilation actually generated an app bundle
           if ls *.app 1> /dev/null 2>&1; then
             mv *.app Payload/
-            zip -r igame_unsigned.ipa Payload
+            # Changed final compressed archive name to game_project_unsigned.ipa
+            zip -r game_project_unsigned.ipa Payload
             rm -rf Payload
-            echo "✅ Successfully created igame_unsigned.ipa"
+            echo "✅ Successfully created game_project_unsigned.ipa"
           else
-            echo "❌ Error: .app bundle not found! The xcodebuild step failed to produce an executable."
+            echo "❌ Error: .app bundle not found! Xcode build failed."
             exit 1
           fi
 
@@ -108,4 +106,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ios-unsigned-ipa
-          path: build/ios/output/igame_unsigned.ipa
+          path: build/ios/output/game_project_unsigned.ipa
