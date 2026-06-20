@@ -68,7 +68,7 @@ jobs:
             VALIDATE_PRODUCT=NO
 
       - name: Upload Build Artifacts
-        uses: actions/artifacts@v4
+        uses: actions/upload-artifact@v4
         with:
           name: ios-xcode-build
           path: ios_build/
