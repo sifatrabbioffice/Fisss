@@ -19,14 +19,26 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Verify and Unzip Project Files
+      - name: Unzip and Locate Project Root
         run: |
           if [ -f "game_project.zip" ]; then
             echo "✅ game_project.zip found! Extracting..."
-            unzip -o game_project.zip -d project_folder
+            unzip -o game_project.zip -d extracted_content
+            
+            # সাব-ফোল্ডার বা নেস্টেড পাথ থাকলে আসল প্রজেক্ট রুট খুঁজে বের করার কোড
+            PROJECT_ROOT=$(find extracted_content -name "project.godot" -exec dirname {} \;)
+            if [ -z "$PROJECT_ROOT" ]; then
+              echo "❌ Error: 'project.godot' file not found anywhere inside the zip file!"
+              exit 1
+            fi
+            echo "🎯 Found project.godot path at: $PROJECT_ROOT"
+            
+            # প্রজেক্ট ফাইলগুলোকে সরাসরি 'project_folder/' এ মুভ করে আনা হচ্ছে
+            mkdir -p project_folder
+            mv "$PROJECT_ROOT"/* project_folder/ 2>/dev/null || true
+            if [ -d "$PROJECT_ROOT"/.godot ]; then mv "$PROJECT_ROOT"/.godot project_folder/ 2>/dev/null || true; fi
           else
             echo "❌ Error: game_project.zip not found in the repository root!"
-            echo "Please make sure your zip file name is exactly 'game_project.zip'"
             exit 1
           fi
 
@@ -58,16 +70,11 @@ jobs:
           mv /tmp/templates/* ~/.local/share/godot/export_templates/${{ env.GODOT_VERSION }}.stable/
           rm Godot_v${{ env.GODOT_VERSION }}-stable_export_templates.tpz
 
-      - name: Import Godot Project Resources
-        run: |
-          # গডোটের ইন্টারনাল ফাইল এবং ফাইলসিস্টেম ক্যাশ জেনারেট করার জন্য
-          /Applications/Godot.app/Contents/MacOS/Godot --headless --path project_folder/ --editor --quit || true
-
       - name: Auto-Generate Export Presets if Missing
         run: |
-          # যদি আপনার জিপের ভেতর export_presets.cfg না থাকে, তবে এই কমান্ডটি স্বয়ংক্রিয়ভাবে একটি iOS প্রিসেট বানিয়ে দেবে
+          # যদি জিপের ভেতর বা প্রজেক্ট রুটে export_presets.cfg না থাকে, তবে একটি সঠিক iOS প্রিসেট জেনারেট করবে
           if [ ! -f "project_folder/export_presets.cfg" ]; then
-            echo "⚠️ export_presets.cfg missing! Creating a temporary iOS preset..."
+            echo "⚠️ export_presets.cfg missing! Auto-generating standard iOS export preset..."
             cat <<EOF > project_folder/export_presets.cfg
           [preset.0]
           name="iOS"
@@ -80,13 +87,20 @@ jobs:
           exclude_filter=""
           export_path="../ios_build/game_project.xcodeproj"
           EOF
+          else
+            echo "✅ export_presets.cfg already exists."
           fi
+
+      - name: Import Godot Project Resources
+        run: |
+          # গডোটের ডেটা ও রিসোর্স মেমোরি ইম্পোর্ট ফিক্স
+          /Applications/Godot.app/Contents/MacOS/Godot --headless --path project_folder/ --editor --quit || true
 
       - name: Godot Export Xcode Project
         run: |
           mkdir -p ios_build
           echo "🚀 Exporting Godot project to Xcode..."
-          # গডোট হেডলেস মোডে আপনার জন্য game_project.xcodeproj তৈরি করবে
+          # গডোট এক্সপোর্ট রান করা এবং সাইলেন্ট ফেইলিউর ট্র্যাক করা
           /Applications/Godot.app/Contents/MacOS/Godot --headless --path project_folder/ --export-release "iOS" "$GITHUB_WORKSPACE/ios_build/${{ env.PROJECT_NAME }}.xcodeproj"
 
       - name: Verify Export Success
@@ -94,7 +108,7 @@ jobs:
           echo "=== Checking exported files ==="
           ls -la "$GITHUB_WORKSPACE/ios_build"
           if [ ! -d "$GITHUB_WORKSPACE/ios_build/${{ env.PROJECT_NAME }}.xcodeproj" ]; then
-            echo "❌ Error: Godot failed to create the Xcode project directory!"
+            echo "❌ Error: Godot failed to create the Xcode project directory! Please make sure your preset name inside Godot is exactly 'iOS'."
             exit 1
           fi
 
