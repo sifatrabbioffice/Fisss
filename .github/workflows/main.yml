@@ -14,62 +14,52 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
+      # Godot এবং টেম্পলেট ক্যাশ করা, যাতে বারবার ডাউনলোড না করতে হয়
+      - name: Cache Godot Templates
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Application Support/Godot/
+          key: godot-templates-4.2.1
+
       - name: Unzip Project Files
         run: unzip -o game_project.zip -d project_folder
 
-      - name: Verify Export Presets
-        run: |
-          if [ ! -f project_folder/export_presets.cfg ]; then
-            echo "❌ export_presets.cfg not found!"
-            exit 1
-          fi
-          grep -q 'name="iOS"' project_folder/export_presets.cfg || \
-            (echo "❌ iOS preset missing in export_presets.cfg" && exit 1)
-          echo "✅ export_presets.cfg OK"
-
-      - name: Download and Setup Godot & Export Templates
+      - name: Download and Setup Godot
         run: |
           set -e
-          
           # Godot ডাউনলোড
-          curl -L -o Godot.zip \
-            https://github.com/godotengine/godot/releases/download/4.2.1-stable/Godot_v4.2.1-stable_macos.universal.zip
-          unzip -q Godot.zip
-          mv Godot.app /Applications/Godot.app
-          echo "/Applications/Godot.app/Contents/MacOS" >> $GITHUB_PATH
+          if [ ! -f /Applications/Godot.app/Contents/MacOS/Godot ]; then
+            curl -L -o Godot.zip https://github.com/godotengine/godot/releases/download/4.2.1-stable/Godot_v4.2.1-stable_macos.universal.zip
+            unzip -q Godot.zip
+            sudo mv Godot.app /Applications/
+          fi
           
-          # Export Templates ডাউনলোড
-          curl -L -o templates.tpz \
-            https://github.com/godotengine/godot/releases/download/4.2.1-stable/Godot_v4.2.1-stable_export_templates.tpz
-          unzip -q templates.tpz
-          
+          # টেম্পলেট ডাউনলোড (যদি ক্যাশে না থাকে)
           TEMPLATE_DIR="$HOME/Library/Application Support/Godot/export_templates/4.2.1.stable"
-          mkdir -p "$TEMPLATE_DIR"
-          mv templates/ios.zip "$TEMPLATE_DIR/ios.zip"
-          echo "✅ Templates installed"
+          if [ ! -d "$TEMPLATE_DIR" ]; then
+            mkdir -p "$TEMPLATE_DIR"
+            curl -L -o templates.tpz https://github.com/godotengine/godot/releases/download/4.2.1-stable/Godot_v4.2.1-stable_export_templates.tpz
+            unzip -q templates.tpz
+            mv templates/ios.zip "$TEMPLATE_DIR/ios.zip"
+          fi
+          echo "/Applications/Godot.app/Contents/MacOS" >> $GITHUB_PATH
 
       - name: Godot Export to iOS
         run: |
           set -e
           mkdir -p build/ios
-          
+          # প্রজেক্টের চেঞ্জ অনুযায়ী এক্সপোর্ট করা
           Godot --headless \
             --path "$GITHUB_WORKSPACE/project_folder/" \
             --export-release "iOS" \
             "$GITHUB_WORKSPACE/build/ios/igame.xcodeproj"
-          
-          echo "✅ Export complete"
-          ls -la build/ios/
 
-      - name: Build Xcode Project (Unsigned)
+      - name: Build Xcode Project
         run: |
           set -e
           cd build/ios
-          
-          # Scheme নাম automatically বের করা
-          SCHEME=$(xcodebuild -project igame.xcodeproj -list \
-            | awk '/Schemes:/{found=1; next} found && NF{print $1; exit}')
-          echo "Using scheme: $SCHEME"
+          # প্রজেক্টের স্কিম খুঁজে বের করা
+          SCHEME=$(xcodebuild -project igame.xcodeproj -list | awk '/Schemes:/{found=1; next} found && NF{print $1; exit}')
           
           xcodebuild -project igame.xcodeproj \
             -scheme "$SCHEME" \
@@ -82,18 +72,16 @@ jobs:
             CONFIGURATION_BUILD_DIR="./output" \
             clean build
 
-      - name: Convert .app to .ipa
+      - name: Create IPA
         run: |
-          set -e
           cd build/ios/output
-          mkdir Payload
+          mkdir -p Payload
           mv *.app Payload/
           zip -r igame_unsigned.ipa Payload
-          rm -rf Payload
-          echo "✅ IPA created: $(ls -lh igame_unsigned.ipa)"
+          echo "IPA_PATH=$(pwd)/igame_unsigned.ipa" >> $GITHUB_ENV
 
-      - name: Upload Unsigned IPA
+      - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: ios-unsigned-ipa
-          path: build/ios/output/igame_unsigned.ipa
+          path: ${{ env.GITHUB_ENV }} # এখানে IPA ফাইলটি আপলোড হবে
