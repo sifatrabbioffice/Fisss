@@ -4,136 +4,96 @@ on:
   push:
     branches:
       - main
-      - master
   workflow_dispatch:
 
 jobs:
   build-ios:
     runs-on: macos-latest
 
-    env:
-      GODOT_VERSION: "4.2.1"
-      PROJECT_NAME: "game_project"
-
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Unzip and Locate Project Root
+      - name: Unzip Project Files
+        run: unzip -o game_project.zip -d project_folder
+
+      - name: Verify Export Presets
         run: |
-          if [ -f "game_project.zip" ]; then
-            echo "✅ game_project.zip found! Extracting..."
-            unzip -o game_project.zip -d extracted_content
-            
-            PROJECT_ROOT=$(find extracted_content -name "project.godot" -exec dirname {} \;)
-            if [ -z "$PROJECT_ROOT" ]; then
-              echo "❌ Error: 'project.godot' file not found inside the zip!"
-              exit 1
-            fi
-            echo "🎯 Found project.godot path at: $PROJECT_ROOT"
-            
-            mkdir -p project_folder
-            mv "$PROJECT_ROOT"/* project_folder/ 2>/dev/null || true
-            if [ -d "$PROJECT_ROOT"/.godot ]; then mv "$PROJECT_ROOT"/.godot project_folder/ 2>/dev/null || true; fi
-          else
-            echo "❌ Error: game_project.zip not found in repository root!"
+          if [ ! -f project_folder/export_presets.cfg ]; then
+            echo "❌ export_presets.cfg not found!"
             exit 1
           fi
+          grep -q 'name="iOS"' project_folder/export_presets.cfg || \
+            (echo "❌ iOS preset missing in export_presets.cfg" && exit 1)
+          echo "✅ export_presets.cfg OK"
 
-      - name: Cache Godot Editor and Templates
-        id: cache-godot
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/Library/Application Support/Godot/export_templates
-            /Applications/Godot.app
-          key: ${{ runner.os }}-godot-${{ env.GODOT_VERSION }}-v2
-
-      - name: Download & Install Godot Engine
-        if: steps.cache-godot.outputs.cache-hit != 'true'
+      - name: Download and Setup Godot & Export Templates
         run: |
-          echo "🤖 Downloading Godot v${{ env.GODOT_VERSION }}..."
-          curl -LO https://github.com/godotengine/godot/releases/download/${{ env.GODOT_VERSION }}-stable/Godot_v${{ env.GODOT_VERSION }}-stable_macos.universal.zip
-          unzip Godot_v${{ env.GODOT_VERSION }}-stable_macos.universal.zip
+          set -e
+          
+          # Godot ডাউনলোড
+          curl -L -o Godot.zip \
+            https://github.com/godotengine/godot/releases/download/4.2.1-stable/Godot_v4.2.1-stable_macos.universal.zip
+          unzip -q Godot.zip
           mv Godot.app /Applications/Godot.app
-          rm Godot_v${{ env.GODOT_VERSION }}-stable_macos.universal.zip
-
-      - name: Download & Install Godot Export Templates
-        if: steps.cache-godot.outputs.cache-hit != 'true'
-        run: |
-          echo "📦 Downloading Export Templates..."
-          curl -LO https://github.com/godotengine/godot/releases/download/${{ env.GODOT_VERSION }}-stable/Godot_v${{ env.GODOT_VERSION }}-stable_export_templates.tpz
+          echo "/Applications/Godot.app/Contents/MacOS" >> $GITHUB_PATH
           
-          # macOS-এর জন্য সঠিক গডোট টেমপ্লেট ডিরেক্টরি তৈরি
-          mkdir -p "~/Library/Application Support/Godot/export_templates/${{ env.GODOT_VERSION }}.stable"
+          # Export Templates ডাউনলোড
+          curl -L -o templates.tpz \
+            https://github.com/godotengine/godot/releases/download/4.2.1-stable/Godot_v4.2.1-stable_export_templates.tpz
+          unzip -q templates.tpz
           
-          unzip Godot_v${{ env.GODOT_VERSION }}-stable_export_templates.tpz -d /tmp
-          mv /tmp/templates/* "~/Library/Application Support/Godot/export_templates/${{ env.GODOT_VERSION }}.stable/"
-          rm Godot_v${{ env.GODOT_VERSION }}-stable_export_templates.tpz
+          TEMPLATE_DIR="$HOME/Library/Application Support/Godot/export_templates/4.2.1.stable"
+          mkdir -p "$TEMPLATE_DIR"
+          mv templates/ios.zip "$TEMPLATE_DIR/ios.zip"
+          echo "✅ Templates installed"
 
-      - name: Auto-Generate Export Presets
+      - name: Godot Export to iOS
         run: |
-          rm -f project_folder/export_presets.cfg
-          echo "📝 Writing custom export_presets.cfg directly inside the target layout..."
-          cat <<EOF > project_folder/export_presets.cfg
-          [preset.0]
-          name="iOS"
-          platform="iOS"
-          runnable=true
-          dedicated_server=false
-          custom_features=""
-          export_filter="all_files"
-          include_filter=""
-          exclude_filter=""
-          export_path="ios_build/game_project.xcodeproj"
-
-          [preset.0.options]
-          # মিসিং সেকশন এরর দূর করার জন্য ফাকা অপশন যোগ করা হলো
-          EOF
-
-      - name: Import Godot Project Resources
-        run: |
-          /Applications/Godot.app/Contents/MacOS/Godot --headless --path project_folder/ --editor --quit || true
-
-      - name: Godot Export Xcode Project
-        run: |
-          mkdir -p project_folder/ios_build
-          echo "🚀 Exporting Godot project to Xcode..."
-          /Applications/Godot.app/Contents/MacOS/Godot --headless --path project_folder/ --export-release "iOS" "ios_build/${{ env.PROJECT_NAME }}.xcodeproj"
-
-      - name: Relocate and Verify Export Success
-        run: |
-          mkdir -p "$GITHUB_WORKSPACE/ios_build"
-          mv project_folder/ios_build/* "$GITHUB_WORKSPACE/ios_build/" 2>/dev/null || true
+          set -e
+          mkdir -p build/ios
           
-          echo "=== Checking exported files ==="
-          ls -la "$GITHUB_WORKSPACE/ios_build"
-          if [ ! -d "$GITHUB_WORKSPACE/ios_build/${{ env.PROJECT_NAME }}.xcodeproj" ]; then
-            echo "❌ Error: Godot failed to create the Xcode project directory!"
-            exit 1
-          fi
-
-      - name: Build Xcode Project (Simulator / No Signing)
-        run: |
-          cd "$GITHUB_WORKSPACE/ios_build"
+          Godot --headless \
+            --path "$GITHUB_WORKSPACE/project_folder/" \
+            --export-release "iOS" \
+            "$GITHUB_WORKSPACE/build/ios/igame.xcodeproj"
           
-          echo "🛠️ Compiling Xcode Project..."
-          xcodebuild \
-            -project "${{ env.PROJECT_NAME }}.xcodeproj" \
-            -scheme "${{ env.PROJECT_NAME }}" \
+          echo "✅ Export complete"
+          ls -la build/ios/
+
+      - name: Build Xcode Project (Unsigned)
+        run: |
+          set -e
+          cd build/ios
+          
+          # Scheme নাম automatically বের করা
+          SCHEME=$(xcodebuild -project igame.xcodeproj -list \
+            | awk '/Schemes:/{found=1; next} found && NF{print $1; exit}')
+          echo "Using scheme: $SCHEME"
+          
+          xcodebuild -project igame.xcodeproj \
+            -scheme "$SCHEME" \
             -configuration Release \
-            -sdk iphonesimulator \
-            -quiet \
-            ONLY_ACTIVE_ARCH=NO \
+            -sdk iphoneos \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             PROVISIONING_PROFILE_SPECIFIER="" \
-            COMPILER_INDEX_STORE_ENABLE=NO \
-            VALIDATE_PRODUCT=NO
+            CONFIGURATION_BUILD_DIR="./output" \
+            clean build
 
-      - name: Upload Build Artifacts
+      - name: Convert .app to .ipa
+        run: |
+          set -e
+          cd build/ios/output
+          mkdir Payload
+          mv *.app Payload/
+          zip -r igame_unsigned.ipa Payload
+          rm -rf Payload
+          echo "✅ IPA created: $(ls -lh igame_unsigned.ipa)"
+
+      - name: Upload Unsigned IPA
         uses: actions/upload-artifact@v4
         with:
-          name: ios-xcode-build
-          path: ios_build/in
+          name: ios-unsigned-ipa
+          path: build/ios/output/igame_unsigned.ipa
